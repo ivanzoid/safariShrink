@@ -34,10 +34,22 @@ func findSafaries() ([]safariProcess, error) {
 
 	for _, line := range lines {
 		comps := strings.Split(line, " ")
+		filteredComps := make([]string, 0)
+
+		for _, comp := range comps {
+			trimmedComp := strings.TrimSpace(comp)
+			if len(trimmedComp) != 0 {
+				filteredComps = append(filteredComps, trimmedComp)
+			}
+		}
+
+		comps = filteredComps
+
 		if len(comps) < 3 {
 			continue
 		}
-		if comps[2] != safariId {
+
+		if !strings.HasSuffix(comps[2], safariId) {
 			continue
 		}
 
