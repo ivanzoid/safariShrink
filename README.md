@@ -14,4 +14,4 @@ App which will kill Safari tabs which use > 1GB of memory.
 You may run it periodically using cron. For example:
 
 1. `crontab -e`. Then enter:
-2. `30 * * * * /Users/ivan/Go/bin/safariShrink` (edit according to your $GOPATH)
+2. `30 * * * * /Users/ivan/Go/bin/safariShrink` (edit according to your `$GOPATH`)
