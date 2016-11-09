@@ -1,12 +1,12 @@
 ### About
 
-App which will kill Safari tabs which use > 1GB of memory.
+App which will kill (most hungry) Safari tabs when Safari will start using too much memory (8GB currently).
 
 
 ### Install
 
 1. Install Go someway (https://golang.org/dl/).
-2. Set `GOPATH` to point to some directory.
+2. Set `GOPATH` environment variable to point to some directory.
 3. Install with `go get github.com/ivanzoid/safariShrink && go install github.com/ivanzoid/safariShrink`
 
 ### Usage

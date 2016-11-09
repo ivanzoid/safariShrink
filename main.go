@@ -5,20 +5,35 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 )
 
 const getImpudentSafariesCommand = "ps axm -o pid,rss,command | grep com.apple.WebKit.WebContent"
 const safariId = "com.apple.WebKit.WebContent"
-const killThresholdBytes = 1024 * 1024 // 1GB
+const maxAllowedUsageMB = 8 * 1024 // 8GB
 
 type safariProcess struct {
-	pid string
-	rss int
+	pid   string
+	rssMB int
 }
 
-func findSafaries() ([]safariProcess, error) {
+type safariProcesses []safariProcess
+
+func (sp safariProcesses) Len() int {
+	return len(sp)
+}
+
+func (sp safariProcesses) Swap(i, j int) {
+	sp[i], sp[j] = sp[j], sp[i]
+}
+
+func (sp safariProcesses) Less(i, j int) bool {
+	return sp[i].rssMB < sp[j].rssMB
+}
+
+func findSafaries() (safariProcesses, error) {
 
 	cmd := "/bin/bash"
 	args := []string{"-c", getImpudentSafariesCommand}
@@ -30,7 +45,7 @@ func findSafaries() ([]safariProcess, error) {
 
 	output := string(rawOutput)
 	lines := strings.Split(output, "\n")
-	var processes []safariProcess
+	var processes safariProcesses
 
 	for _, line := range lines {
 		comps := strings.Split(line, " ")
@@ -56,11 +71,13 @@ func findSafaries() ([]safariProcess, error) {
 		var process safariProcess
 
 		process.pid = comps[0]
-		process.rss, err = strconv.Atoi(comps[1])
+		rssKB, err := strconv.Atoi(comps[1])
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warn: can't parse \"%v\"\n", line)
 			continue
 		}
+
+		process.rssMB = rssKB / 1024
 
 		processes = append(processes, process)
 	}
@@ -90,18 +107,34 @@ func main() {
 		log.Fatalln(err)
 	}
 
+	totalUsageMB := 0
+
 	for _, process := range safariProcesses {
-		if process.rss >= killThresholdBytes {
-			usedMemoryInGb := (float64)(process.rss) / (1024.0 * 1024.0)
-			fmt.Printf("Killing process %v (uses %.1fGB)...\n", process.pid, usedMemoryInGb)
-			output, err := killProcess(process.pid)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: can't kill process %v: %v\n", process.pid, err)
-				continue
-			}
-			if len(output) != 0 {
-				fmt.Println(output)
-			}
+		totalUsageMB += process.rssMB
+	}
+
+	if totalUsageMB <= maxAllowedUsageMB {
+		return
+	}
+
+	sort.Sort(safariProcesses)
+
+	for i := len(safariProcesses) - 1; i >= 0; i-- {
+		if totalUsageMB <= maxAllowedUsageMB {
+			break
+		}
+
+		process := safariProcesses[i]
+
+		fmt.Printf("Killing Safari process %v (uses %dMB)...\n", process.pid, process.rssMB)
+
+		output, err := killProcess(process.pid)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: can't kill process %v: %v\n", process.pid, err)
+			continue
+		}
+		if len(output) != 0 {
+			fmt.Println(output)
 		}
 	}
 }
