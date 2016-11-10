@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -10,7 +11,7 @@ import (
 	"strings"
 )
 
-const getImpudentSafariesCommand = "ps axm -o pid,rss,command | grep com.apple.WebKit.WebContent"
+const getSafariProcessesCommand = "ps axm -o pid,rss,command | grep com.apple.WebKit.WebContent"
 const safariId = "com.apple.WebKit.WebContent"
 const maxAllowedUsageMB = 8 * 1024 // 8GB
 
@@ -36,11 +37,11 @@ func (sp safariProcesses) Less(i, j int) bool {
 func findSafaries() (safariProcesses, error) {
 
 	cmd := "/bin/bash"
-	args := []string{"-c", getImpudentSafariesCommand}
+	args := []string{"-c", getSafariProcessesCommand}
 	rawOutput, err := exec.Command(cmd, args...).Output()
 
 	if err != nil {
-		return nil, fmt.Errorf("Can't run \"%v\": %v", getImpudentSafariesCommand, err)
+		return nil, fmt.Errorf("Can't run \"%v\": %v", getSafariProcessesCommand, err)
 	}
 
 	output := string(rawOutput)
@@ -91,7 +92,7 @@ func killProcess(pid string) (output string, err error) {
 	rawOutput, err := exec.Command(cmd, args...).Output()
 
 	if err != nil {
-		return "", fmt.Errorf("Can't run \"%v\": %v", getImpudentSafariesCommand, err)
+		return "", fmt.Errorf("Can't run \"%v\": %v", getSafariProcessesCommand, err)
 	}
 
 	output = string(rawOutput)
@@ -99,7 +100,19 @@ func killProcess(pid string) (output string, err error) {
 	return output, nil
 }
 
+// Flags
+var helpFlagPtr = flag.Bool("h", false, "Show help")
+var listFlagPtr = flag.Bool("l", false, "Only list Safari processes")
+
 func main() {
+
+	flag.Parse()
+
+	if *helpFlagPtr {
+		fmt.Fprintln(os.Stderr, "Usage:")
+		flag.PrintDefaults()
+		return
+	}
 
 	safariProcesses, err := findSafaries()
 
@@ -108,6 +121,19 @@ func main() {
 	}
 
 	totalUsageMB := 0
+
+	if *listFlagPtr {
+		sort.Sort(safariProcesses)
+
+		for i := len(safariProcesses) - 1; i >= 0; i-- {
+			process := safariProcesses[i]
+			fmt.Printf("Safari process %v uses %dMB.\n", process.pid, process.rssMB)
+			totalUsageMB += process.rssMB
+		}
+
+		fmt.Printf("Total Safari memory usage is %dMB.\n", totalUsageMB)
+		return
+	}
 
 	for _, process := range safariProcesses {
 		totalUsageMB += process.rssMB
