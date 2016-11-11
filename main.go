@@ -143,6 +143,8 @@ func main() {
 		return
 	}
 
+	fmt.Printf("Total Safari memory usage is %dMB.\n", totalUsageMB)
+
 	sort.Sort(safariProcesses)
 
 	for i := len(safariProcesses) - 1; i >= 0; i-- {
