@@ -178,6 +178,7 @@ func configReadInt64(config map[string]interface{}, key string) (int64, bool) {
 // Flags
 var helpFlagPtr = flag.Bool("h", false, "Show help")
 var listFlagPtr = flag.Bool("l", false, "Only list Safari processes")
+var forceFlagPtr = flag.Bool("f", false, "Force kill all Safari")
 
 func main() {
 
@@ -224,7 +225,7 @@ func main() {
 		totalUsageMB += process.rssMB
 	}
 
-	if totalUsageMB <= limitMB {
+	if !*forceFlagPtr && totalUsageMB <= limitMB {
 		return
 	}
 
@@ -233,7 +234,7 @@ func main() {
 	sort.Sort(safariProcesses)
 
 	for i := len(safariProcesses) - 1; i >= 0; i-- {
-		if totalUsageMB <= limitMB {
+		if !*forceFlagPtr && totalUsageMB <= limitMB {
 			break
 		}
 
