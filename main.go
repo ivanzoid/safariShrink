@@ -197,7 +197,7 @@ func main() {
 		limitMB = limitMBRead
 	}
 
-	fmt.Printf("limitMB = %v\n", limitMB)
+	//fmt.Printf("limitMB = %v\n", limitMB)
 
 	safariProcesses, err := findSafaries()
 
@@ -249,5 +249,7 @@ func main() {
 		if len(output) != 0 {
 			fmt.Println(output)
 		}
+
+		totalUsageMB -= process.rssMB
 	}
 }
