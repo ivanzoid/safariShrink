@@ -1,23 +1,30 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
+	"os/user"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
+
+	yaml "gopkg.in/yaml.v2"
 )
 
 const getSafariProcessesCommand = "ps axm -o pid,rss,command | grep com.apple.WebKit.WebContent"
 const safariId = "com.apple.WebKit.WebContent"
-const maxAllowedUsageMB = 8 * 1024 // 8GB
+
+var limitMB int64 = 8 * 1024
 
 type safariProcess struct {
 	pid   string
-	rssMB int
+	rssMB int64
 }
 
 type safariProcesses []safariProcess
@@ -72,7 +79,7 @@ func findSafaries() (safariProcesses, error) {
 		var process safariProcess
 
 		process.pid = comps[0]
-		rssKB, err := strconv.Atoi(comps[1])
+		rssKB, err := strconv.ParseInt(comps[1], 10, 64)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warn: can't parse \"%v\"\n", line)
 			continue
@@ -100,6 +107,74 @@ func killProcess(pid string) (output string, err error) {
 	return output, nil
 }
 
+func loadConfig(configPathRelativeToHome string) (config map[string]interface{}, err error) {
+	user, _ := user.Current()
+	filePath := path.Join(user.HomeDir, configPathRelativeToHome)
+
+	bytes, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		return
+	}
+
+	var rawData interface{}
+	err = yaml.Unmarshal(bytes, &rawData)
+	if err != nil {
+		return
+	}
+
+	halfRawData, ok := rawData.(map[interface{}]interface{})
+	if !ok {
+		return nil, errors.New("Yaml root object is not dictionary")
+	}
+
+	config = make(map[string]interface{})
+
+	for key, value := range halfRawData {
+		if keyAsString, ok := key.(string); ok {
+			config[keyAsString] = value
+		} else {
+			fmt.Printf("Key '%v' is not string - ignoring.\n", key)
+		}
+	}
+
+	return config, nil
+}
+
+func interfaceToInt64(value interface{}) int64 {
+	if value == nil {
+		return 0
+	}
+	switch typedValue := value.(type) {
+	case int64:
+		return typedValue
+	case int8:
+		return int64(typedValue)
+	case int16:
+		return int64(typedValue)
+	case int32:
+		return int64(typedValue)
+	case uint8:
+		return int64(typedValue)
+	case uint16:
+		return int64(typedValue)
+	case uint32:
+		return int64(typedValue)
+	case int:
+		return int64(typedValue)
+	case uint:
+		return int64(typedValue)
+	default:
+		return 0
+	}
+}
+
+func configReadInt64(config map[string]interface{}, key string) (int64, bool) {
+	if valueRaw, ok := config[key]; ok {
+		return interfaceToInt64(valueRaw), true
+	}
+	return 0, false
+}
+
 // Flags
 var helpFlagPtr = flag.Bool("h", false, "Show help")
 var listFlagPtr = flag.Bool("l", false, "Only list Safari processes")
@@ -114,13 +189,23 @@ func main() {
 		return
 	}
 
+	config, err := loadConfig(".safariShrink/config.yml")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Can't read config: %v\n", err)
+	}
+	if limitMBRead, ok := configReadInt64(config, "limitMB"); ok {
+		limitMB = limitMBRead
+	}
+
+	fmt.Printf("limitMB = %v\n", limitMB)
+
 	safariProcesses, err := findSafaries()
 
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	totalUsageMB := 0
+	var totalUsageMB int64 = 0
 
 	if *listFlagPtr {
 		sort.Sort(safariProcesses)
@@ -139,7 +224,7 @@ func main() {
 		totalUsageMB += process.rssMB
 	}
 
-	if totalUsageMB <= maxAllowedUsageMB {
+	if totalUsageMB <= limitMB {
 		return
 	}
 
@@ -148,7 +233,7 @@ func main() {
 	sort.Sort(safariProcesses)
 
 	for i := len(safariProcesses) - 1; i >= 0; i-- {
-		if totalUsageMB <= maxAllowedUsageMB {
+		if totalUsageMB <= limitMB {
 			break
 		}
 
